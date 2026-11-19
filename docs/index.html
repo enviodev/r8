@@ -172,8 +172,30 @@
 </div>
 
 <script>
-// GraphQL endpoint of the hosted indexer. Override with ?endpoint=<url>.
-const ENDPOINT = new URLSearchParams(location.search).get("endpoint") || "https://enviodev-d1e1b1f.internal.hyperindex.xyz/v1/graphql";
+// GraphQL endpoints of the hosted indexer, tried in order: the region-neutral
+// host, then the regional one. Override with ?endpoint=<url>.
+const OVERRIDE = new URLSearchParams(location.search).get("endpoint");
+const ENDPOINTS = OVERRIDE ? [OVERRIDE] : [
+  "https://enviodev-d1e1b1f.internal.hyperindex.xyz/v1/graphql",
+  "https://indexer.eu-internal.hyperindex.xyz/d1e1b1f/v1/graphql",
+];
+let active = 0;
+
+async function query() {
+  let lastError;
+  for (let i = 0; i < ENDPOINTS.length; i++) {
+    const at = (active + i) % ENDPOINTS.length;
+    try {
+      const res = await fetch(ENDPOINTS[at], { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: QUERY }) });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      active = at;
+      $("gql").href = ENDPOINTS[at];
+      return json.data;
+    } catch (e) { lastError = e; }
+  }
+  throw lastError;
+}
 
 const SYMBOLS = {
   So11111111111111111111111111111111111111112: "SOL",
@@ -303,10 +325,7 @@ function renderChart(rows) {
 let chartKey = "";
 async function refresh() {
   try {
-    const res = await fetch(ENDPOINT, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: QUERY }) });
-    const json = await res.json();
-    if (json.errors) throw new Error(json.errors[0].message);
-    const d = json.data, s = d.ProtocolStats[0];
+    const d = await query(), s = d.ProtocolStats[0];
     if (s) {
       $("s-markets").textContent = int(s.marketCount);
       $("s-trades").textContent = int(s.tradeCount);
@@ -326,7 +345,7 @@ async function refresh() {
   }
 }
 
-$("gql").href = ENDPOINT;
+$("gql").href = ENDPOINTS[0];
 refresh();
 setInterval(refresh, 10000);
 </script>
