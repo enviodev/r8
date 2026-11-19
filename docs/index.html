@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R8 on-chain · Envio</title>
+<meta name="description" content="Every R8 market and trade, indexed from Solana with Envio HyperIndex.">
+<meta name="theme-color" content="#0A0D12">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d12;
+    --surface: #10151d;
+    --surface-2: #141c28;
+    --border: #ffffff12;
+    --border-strong: #ffffff1f;
+    --text: #e9eef6;
+    --text-2: #aeb8c9;
+    --muted: #8c96a9;
+    --faint: #5a6472;
+    --up: #3ee08d;
+    --down: #ff6070;
+    --bar: #7c8698;
+    --radius: 16px;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --sans: "Space Grotesk", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 13px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  a:hover { color: var(--text); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 64px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 20px 0; border-bottom: 1px solid var(--border);
+  }
+  .brand { font-family: var(--sans); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
+  .brand span { color: var(--muted); font-weight: 500; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .dot.live { background: var(--up); box-shadow: 0 0 0 3px color-mix(in srgb, var(--up) 18%, transparent); }
+  .dot.err { background: var(--down); }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; letter-spacing: -0.02em;
+    font-size: clamp(26px, 4.4vw, 40px); line-height: 1.1; margin: 40px 0 8px;
+  }
+  .lede { color: var(--muted); margin: 0 0 28px; max-width: 60ch; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .stat b { display: block; font-family: var(--sans); font-weight: 600; font-size: 28px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat small { color: var(--muted); font-size: 12px; }
+
+  section { margin-top: 36px; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  h2 { font-family: var(--sans); font-weight: 600; font-size: 16px; margin: 0; }
+  .head small { color: var(--faint); font-size: 12px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th {
+    text-align: left; font-weight: 400; color: var(--faint); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 16px; white-space: nowrap;
+  }
+  td { padding: 12px 16px; border-top: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
+  th.n, td.n { text-align: right; }
+  tbody tr:hover { background: var(--surface-2); }
+  .q { font-family: var(--sans); font-weight: 600; font-size: 14px; color: var(--text); }
+  .sub { color: var(--muted); font-size: 12px; }
+  .unit { color: var(--faint); }
+
+  .split { min-width: 190px; }
+  .split .track { display: flex; gap: 2px; height: 6px; border-radius: 99px; overflow: hidden; background: var(--border); }
+  .split .a { background: var(--up); }
+  .split .b { background: var(--down); }
+  .split .labels { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 11px; color: var(--text-2); }
+  .split .labels i { font-style: normal; color: var(--faint); }
+
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; border: 1px solid var(--border-strong); color: var(--text-2); }
+  .chip.buy { color: var(--up); border-color: color-mix(in srgb, var(--up) 35%, transparent); background: color-mix(in srgb, var(--up) 10%, transparent); }
+  .chip.sell { color: var(--down); border-color: color-mix(in srgb, var(--down) 35%, transparent); background: color-mix(in srgb, var(--down) 10%, transparent); }
+  .addr { color: var(--muted); }
+  .addr:hover { color: var(--text); }
+
+  .chart { padding: 16px 16px 10px; position: relative; }
+  .chart svg { display: block; width: 100%; height: 140px; }
+  .chart rect.b { fill: var(--bar); }
+  .chart rect.hit { fill: transparent; }
+  .chart g:hover rect.b { fill: var(--text); }
+  .axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 11px; margin-top: 6px; }
+  .tip {
+    position: absolute; pointer-events: none; display: none; transform: translateX(-50%);
+    background: #1b2028; border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; white-space: nowrap; color: var(--text);
+  }
+  .tip span { color: var(--muted); }
+
+  .empty { padding: 28px 16px; color: var(--muted); text-align: center; }
+  footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  footer a { color: var(--muted); }
+
+  @media (max-width: 720px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .hide-s { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">R8 <span>on-chain</span></div>
+    <div class="status"><i class="dot" id="dot"></i><span id="status">connecting</span></div>
+  </header>
+
+  <h1>Every market and trade, straight from Solana.</h1>
+  <p class="lede">Indexed from the R8 program's own events with Envio HyperIndex. Refreshes every 10 seconds.</p>
+
+  <div class="stats">
+    <div class="stat"><b id="s-markets">–</b><small>markets</small></div>
+    <div class="stat"><b id="s-trades">–</b><small>trades</small></div>
+    <div class="stat"><b id="s-traders">–</b><small>traders</small></div>
+    <div class="stat"><b id="s-assets">–</b><small>quote assets</small></div>
+  </div>
+
+  <section>
+    <div class="head"><h2>Trades per day</h2><small>UTC</small></div>
+    <div class="card chart" id="chart"><div class="empty">Loading</div></div>
+  </section>
+
+  <section>
+    <div class="head"><h2>Markets</h2><small>by trades</small></div>
+    <div class="card scroll">
+      <table>
+        <thead><tr>
+          <th>Market</th><th>Supply by side</th><th class="n">Trades</th><th class="n">Volume</th>
+          <th class="n hide-s">Creator fees</th><th class="n hide-s">Last trade</th>
+        </tr></thead>
+        <tbody id="markets"><tr><td colspan="6" class="empty">Loading</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="head"><h2>Latest trades</h2><small>newest first</small></div>
+    <div class="card scroll">
+      <table>
+        <thead><tr>
+          <th>When</th><th>Type</th><th>Side</th><th class="n">Amount</th>
+          <th class="n hide-s">Fee</th><th class="hide-s">Trader</th><th class="n">Tx</th>
+        </tr></thead>
+        <tbody id="trades"><tr><td colspan="7" class="empty">Loading</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://r8rate.com" target="_blank" rel="noopener">r8rate.com</a>
+    <a id="gql" href="#" target="_blank" rel="noopener">GraphQL endpoint</a>
+    <a href="https://github.com/enviodev/r8" target="_blank" rel="noopener">Source</a>
+    <a href="https://envio.dev" target="_blank" rel="noopener">Built with Envio</a>
+  </footer>
+</div>
+
+<script>
+// GraphQL endpoint of the hosted indexer. Override with ?endpoint=<url>.
+const ENDPOINT = new URLSearchParams(location.search).get("endpoint") || "https://enviodev-d1e1b1f.internal.hyperindex.xyz/v1/graphql";
+
+const SYMBOLS = {
+  So11111111111111111111111111111111111111112: "SOL",
+  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: "USDC",
+  DDmGnuvroxVrb7CSyjYcezFU8gnAfhKasg4ZZezmpump: "AMD",
+  CSocnzcRpgSCr1naKcNTieWZUxb6rABe45j844m7pump: "Kimchi",
+  "9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump": "ANSEM",
+  Pren1FvFX6J3E4kXhJuCiAD5aDmGEb7qJRncwA8Lkhw: "ANTHROPIC",
+  METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL: "MET",
+  cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij: "cbBTC",
+  Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: "NVDAx",
+  METAwkXcqyXKy1AtsSgJ8JiUHwGCafnZL38n3vYmeta: "META",
+  PreweJYECqtQwBtpxHL171nL2K6umo692gTm7Q3rpgF: "OPENAI",
+  pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn: "PUMP",
+  XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg: "HOODx",
+  Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu: "COINx",
+  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB: "TSLAx",
+};
+
+const QUERY = `{
+  ProtocolStats { marketCount tradeCount traderCount quoteAssetCount lastSlot }
+  Market(order_by: {tradeCount: desc}, limit: 15) {
+    id question ticker0 ticker1 quoteMint quoteDecimals
+    supply0 supply1 tradeCount volume creatorFees lastTradeAt
+  }
+  Trade(order_by: {slot: desc}, limit: 15) {
+    id kind side gross fee time trader txSignature
+    market { ticker0 ticker1 quoteMint quoteDecimals }
+  }
+  MarketDailyStat(order_by: {dayStart: asc}, limit: 1000) { dayStart tradeCount }
+}`;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const int = (n) => Number(n).toLocaleString("en-US");
+const short = (a) => a.slice(0, 4) + "…" + a.slice(-4);
+const symbol = (mint) => SYMBOLS[mint] || short(mint);
+const sideName = (ticker) => ticker.split(".").pop();
+
+function amount(atoms, decimals) {
+  const v = Number(atoms) / 10 ** decimals;
+  if (v === 0) return "0";
+  if (v >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (v >= 1) return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return v.toLocaleString("en-US", { maximumSignificantDigits: 3 });
+}
+
+function ago(t) {
+  if (!t) return "–";
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - t));
+  if (s < 60) return s + "s ago";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return Math.floor(s / 86400) + "d ago";
+}
+
+function renderMarkets(markets) {
+  $("markets").innerHTML = markets.map((m) => {
+    const a = Number(m.supply0), b = Number(m.supply1), total = a + b;
+    const pa = total ? Math.round((a / total) * 100) : 0;
+    const sym = esc(symbol(m.quoteMint));
+    const track = total
+      ? `<div class="track">${pa > 0 ? `<i class="a" style="flex:${pa}"></i>` : ""}${pa < 100 ? `<i class="b" style="flex:${100 - pa}"></i>` : ""}</div>`
+      : `<div class="track"></div>`;
+    return `<tr>
+      <td><div class="q">${esc(m.question)}</div><div class="sub">in ${sym}</div></td>
+      <td><div class="split">${track}
+        <div class="labels"><span>${esc(sideName(m.ticker0))} <i>${total ? pa + "%" : "–"}</i></span><span><i>${total ? 100 - pa + "%" : "–"}</i> ${esc(sideName(m.ticker1))}</span></div>
+      </div></td>
+      <td class="n">${int(m.tradeCount)}</td>
+      <td class="n">${amount(m.volume, m.quoteDecimals)} <span class="unit">${sym}</span></td>
+      <td class="n hide-s">${amount(m.creatorFees, m.quoteDecimals)} <span class="unit">${sym}</span></td>
+      <td class="n hide-s sub">${ago(m.lastTradeAt)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6" class="empty">No markets yet</td></tr>`;
+}
+
+function renderTrades(trades) {
+  $("trades").innerHTML = trades.map((t) => {
+    const m = t.market, sym = esc(symbol(m.quoteMint));
+    const from = sideName(t.side === 0 ? m.ticker0 : m.ticker1);
+    const to = sideName(t.side === 0 ? m.ticker1 : m.ticker0);
+    const base = esc(m.ticker0.split(".")[0]);
+    const side = t.kind === "SWAP" ? `${base} ${esc(from)} → ${esc(to)}` : `${base} ${esc(from)}`;
+    return `<tr>
+      <td class="sub">${ago(t.time)}</td>
+      <td><span class="chip ${t.kind.toLowerCase()}">${t.kind}</span></td>
+      <td>${side}</td>
+      <td class="n">${amount(t.gross, m.quoteDecimals)} <span class="unit">${sym}</span></td>
+      <td class="n hide-s sub">${amount(t.fee, m.quoteDecimals)}</td>
+      <td class="hide-s"><a class="addr" href="https://solscan.io/account/${esc(t.trader)}" target="_blank" rel="noopener">${esc(short(t.trader))}</a></td>
+      <td class="n"><a class="addr" href="https://solscan.io/tx/${esc(t.txSignature)}" target="_blank" rel="noopener">${esc(short(t.txSignature))} ↗</a></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="7" class="empty">No trades yet</td></tr>`;
+}
+
+function renderChart(rows) {
+  const DAY = 86400, byDay = new Map();
+  for (const r of rows) byDay.set(r.dayStart, (byDay.get(r.dayStart) || 0) + r.tradeCount);
+  if (!byDay.size) { $("chart").innerHTML = `<div class="empty">No trades yet</div>`; return; }
+  const first = Math.min(...byDay.keys());
+  const last = Math.floor(Date.now() / 1000 / DAY) * DAY;
+  const days = [];
+  for (let d = first; d <= last; d += DAY) days.push([d, byDay.get(d) || 0]);
+  const max = Math.max(...days.map((d) => d[1]), 1);
+  const W = 1000, H = 140, slot = W / days.length, bw = Math.max(1, slot - 2);
+  const fmt = (d) => new Date(d * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const bars = days.map(([d, n], i) => {
+    const h = n ? Math.max(2, (n / max) * (H - 4)) : 0;
+    return `<g data-d="${fmt(d)}" data-n="${n}" data-x="${((i + 0.5) / days.length) * 100}">
+      <rect class="b" x="${(i * slot + 1).toFixed(2)}" y="${(H - h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" rx="${Math.min(3, bw / 2)}"/>
+      <rect class="hit" x="${(i * slot).toFixed(2)}" y="0" width="${slot.toFixed(2)}" height="${H}"/></g>`;
+  }).join("");
+  $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Trades per day">${bars}</svg>
+    <div class="axis"><span>${fmt(first)}</span><span>peak ${int(max)} / day</span><span>${fmt(last)}</span></div><div class="tip" id="tip"></div>`;
+  const tip = $("tip");
+  $("chart").querySelectorAll("g").forEach((g) => {
+    g.addEventListener("mouseenter", () => {
+      tip.innerHTML = `${int(g.dataset.n)} trades <span>· ${g.dataset.d}</span>`;
+      tip.style.left = `clamp(70px, ${g.dataset.x}%, calc(100% - 70px))`;
+      tip.style.top = "10px"; tip.style.display = "block";
+    });
+    g.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  });
+}
+
+let chartKey = "";
+async function refresh() {
+  try {
+    const res = await fetch(ENDPOINT, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: QUERY }) });
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors[0].message);
+    const d = json.data, s = d.ProtocolStats[0];
+    if (s) {
+      $("s-markets").textContent = int(s.marketCount);
+      $("s-trades").textContent = int(s.tradeCount);
+      $("s-traders").textContent = int(s.traderCount);
+      $("s-assets").textContent = int(s.quoteAssetCount);
+    }
+    renderMarkets(d.Market);
+    renderTrades(d.Trade);
+    const key = JSON.stringify(d.MarketDailyStat.length) + (s ? s.tradeCount : "");
+    if (key !== chartKey) { chartKey = key; renderChart(d.MarketDailyStat); }
+    $("dot").className = "dot live";
+    $("status").textContent = s ? "live · slot " + int(s.lastSlot) : "live";
+  } catch (e) {
+    $("dot").className = "dot err";
+    $("status").textContent = "indexer unreachable";
+    console.error(e);
+  }
+}
+
+$("gql").href = ENDPOINT;
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

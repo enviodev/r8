@@ -3,6 +3,8 @@
 A [HyperIndex](https://docs.envio.dev) indexer for [R8](https://r8rate.com) — perpetual
 two-sided opinion markets on Solana — streamed from HyperSync.
 
+- **Dashboard:** https://enviodev.github.io/r8/ (source in `docs/`, a single static page)
+- **GraphQL:** https://enviodev-d1e1b1f.internal.hyperindex.xyz/v1/graphql (Envio Cloud staging)
 - **Program:** [`r8aL8ziDaEq2A9tS89e29cGhDuSN4tNq5o5fbxkQ8r8`](https://solscan.io/account/r8aL8ziDaEq2A9tS89e29cGhDuSN4tNq5o5fbxkQ8r8) (Solana mainnet)
 - **Coverage:** the program's full history, from its first transaction
   (slot 452,272,309, 2026-10-01) to the chain head
@@ -150,3 +152,10 @@ transactions.
 - `schema.graphql` — entities
 - `src/handlers/R8Handlers.ts` — handlers
 - `src/indexer.test.ts` — tests built on real mainnet events
+- `docs/index.html` — the dashboard, served by GitHub Pages
+
+## Deployment
+
+Envio Cloud deploys the indexer from the `envio` branch; `main` carries everything else, so
+dashboard changes don't trigger a re-index. To ship an indexer change:
+`git push origin main:envio`.
