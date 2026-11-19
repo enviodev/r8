@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=./node_modules/envio/svm.schema.json
+name: r8-indexer
+description: >
+  R8 (r8rate.com) on Solana — perpetual two-sided opinion markets. Indexes every
+  market launch and every buy / sell / swap from the program's Anchor events:
+  per-market supply, volume and fee splits, trader positions, per-quote-asset
+  and daily rollups.
+ecosystem: svm
+chains:
+  - id: solana # Envio chain id 7565164; HyperSync defaults to https://solana.hypersync.xyz
+    # First R8 program transaction is slot 452,272,309 (2026-10-01 11:19 UTC).
+    # HyperSync serves a rolling window of Solana history, so re-check the floor
+    # before lowering this.
+    start_slot: 452272000
+programs:
+  - name: R8
+    program_id: r8aL8ziDaEq2A9tS89e29cGhDuSN4tNq5o5fbxkQ8r8
+    # The program publishes no IDL. It reports everything through Anchor
+    # `emit_cpi!` events: a self-CPI inner instruction whose data is
+    #   e445a52e51cb9a1d (event-CPI tag) + 8-byte event discriminator + Borsh body.
+    # Each event is declared here as an "instruction" keyed on that 16-byte
+    # prefix. The layouts were recovered from mainnet transactions and
+    # cross-checked against R8's public API (/api/v1/activity, /api/v1/markets).
+    instructions:
+      - name: trade_event
+        discriminator: "0xe445a52e51cb9a1d18feda98fd2b1251"
+        accounts: [event_authority]
+        args:
+          - { name: market, type: pubkey }
+          - { name: trader, type: pubkey }
+          - { name: side, type: u8 } # 0 | 1. Buy: side bought. Sell / swap: side sold.
+          - { name: kind, type: u8 } # 0 buy, 1 sell, 2 swap
+          - { name: quote_in, type: u64 } # buy only; equals `charged`
+          - { name: tokens_burned, type: u64 } # sell / swap: atoms burnt from `side`
+          - { name: tokens, type: u64 } # minted (buy), burnt (sell), minted on the other side (swap)
+          - { name: charged, type: u64 } # quote paid into the pool (buy, swap)
+          - { name: payout, type: u64 } # gross quote released from the pool (sell, swap)
+          - { name: fee, type: u64 }
+          - { name: creator_fee, type: u64 }
+          - { name: beneficiary_fee, type: u64 }
+          - { name: quantum, type: u64 }
+          - { name: remaining_0, type: u64 } # unminted side-0 atoms (cap 1e15) after the trade
+          - { name: remaining_1, type: u64 }
+          - { name: slot, type: u64 }
+      - name: market_created_event
+        discriminator: "0xe445a52e51cb9a1d58b882e7e254063a"
+        accounts: [event_authority]
+        args:
+          - { name: market, type: pubkey }
+          - { name: creator, type: pubkey }
+          - { name: beneficiary, type: pubkey } # 1111…1111 when unset
+          - { name: quote_mint, type: pubkey }
+          - { name: quote_decimals, type: u8 }
+          - { name: quantum, type: u64 }
+          - { name: promotion_threshold, type: u64 }
+          - { name: quote_vault, type: pubkey }
+          - { name: mint_0, type: pubkey }
+          - { name: mint_1, type: pubkey }
+          - { name: unknown_key, type: pubkey } # role not established; not indexed
+          - { name: question, type: string }
+          - { name: ticker_0, type: string }
+          - { name: ticker_1, type: string }
+          - { name: slot, type: u64 }
+      # Fee sweeps. Each seat (creator, beneficiary, protocol) claims its
+      # accrued share of a market's fees separately.
+      - name: creator_claim_event
+        discriminator: "0xe445a52e51cb9a1d76ce1edb3ea436c8"
+        accounts: [event_authority]
+        args: &claim_args
+          - { name: market, type: pubkey }
+          - { name: recipient, type: pubkey }
+          - { name: amount, type: u64 } # quote atoms
+          - { name: slot, type: u64 }
+      - name: beneficiary_claim_event
+        discriminator: "0xe445a52e51cb9a1d8695105688831f48"
+        accounts: [event_authority]
+        args: *claim_args
+      - name: protocol_claim_event
+        discriminator: "0xe445a52e51cb9a1dc03d99b1888feaf6"
+        accounts: [event_authority]
+        args: *claim_args
+      # Quote listings: the admin-curated set of mints a market may be
+      # denominated in, each with its price-grid quantum and crown threshold.
+      - name: quote_listing_created_event
+        discriminator: "0xe445a52e51cb9a1da5c8ea46fe4a5f3e"
+        accounts: [event_authority]
+        args:
+          - { name: listing, type: pubkey }
+          - { name: quote_mint, type: pubkey }
+          - { name: authority, type: pubkey }
+          - { name: quantum, type: u64 }
+          - { name: promotion_threshold, type: u64 }
+          - { name: slot, type: u64 }
+      - name: quote_listing_updated_event
+        discriminator: "0xe445a52e51cb9a1db51452b7c95efa40"
+        accounts: [event_authority]
+        args:
+          - { name: listing, type: pubkey }
+          - { name: quote_mint, type: pubkey }
+          - { name: authority, type: pubkey }
+          - { name: old_quantum, type: u64 }
+          - { name: new_quantum, type: u64 }
+          - { name: old_promotion_threshold, type: u64 }
+          - { name: new_promotion_threshold, type: u64 }
+          - { name: slot, type: u64 }

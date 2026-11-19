@@ -1,0 +1,179 @@
+enum TradeKind {
+  BUY
+  SELL
+  SWAP
+}
+
+enum FeeSeat {
+  CREATOR
+  BENEFICIARY
+  PROTOCOL
+}
+
+"""
+One R8 market: a pair of opposing side tokens (e.g. $MERT.COOL / $MERT.SUCKS)
+sharing a single pool of one quote asset. Static fields come from the
+`MarketCreated` event; the running fields are folded from every `Trade`.
+All quote amounts are raw atoms of `quoteMint` (divide by 10^quoteDecimals).
+Side-token amounts are raw atoms (6 decimals, hard cap 1e15 atoms per side).
+"""
+type Market {
+  id: ID! # market account address
+  question: String!
+  ticker0: String! # side 0 ticker, e.g. "MERT.COOL"
+  ticker1: String! # side 1 ticker, e.g. "MERT.SUCKS"
+  creator: String! @index
+  beneficiary: String # wallet earning the beneficiary fee share; null when unset
+  quoteMint: String! @index
+  quoteAsset: QuoteAsset!
+  quoteDecimals: Int!
+  quantum: BigInt! # the market's price-grid unit for one quote atom
+  promotionThreshold: BigInt! # pool size (quote atoms) at which the market is crowned
+  quoteVault: String!
+  mint0: String! @index
+  mint1: String! @index
+  createdSlot: Int!
+  createdAt: Int! @index
+  createdTx: String!
+
+  supply0: BigInt! # circulating side-0 tokens after the latest trade
+  supply1: BigInt!
+  # sum(charged) - sum(payout): quote traders have put in, net of what they took
+  # out. Equals R8's reported TVL on buy-only markets and stays within ~1% of it
+  # otherwise; it is a flow total, not the curve's own TVL figure.
+  netQuoteIn: BigInt!
+  volume: BigInt! # gross quote traded (charged on buys, payout on sells and swaps)
+  feesTotal: BigInt!
+  creatorFees: BigInt!
+  beneficiaryFees: BigInt!
+  protocolFees: BigInt!
+  creatorFeesClaimed: BigInt! # swept so far; accrued = creatorFees - creatorFeesClaimed
+  beneficiaryFeesClaimed: BigInt!
+  protocolFeesClaimed: BigInt!
+  tradeCount: Int!
+  buyCount: Int!
+  sellCount: Int!
+  swapCount: Int!
+  lastPrice0: Float # last fill price of side 0, quote atoms per token atom
+  lastPrice1: Float
+  lastTradeAt: Int @index
+  lastTradeSlot: Int
+
+  trades: [Trade!]! @derivedFrom(field: "market")
+  positions: [Position!]! @derivedFrom(field: "market")
+  feeClaims: [FeeClaim!]! @derivedFrom(field: "market")
+  dailyStats: [MarketDailyStat!]! @derivedFrom(field: "market")
+}
+
+"""One fill: a buy, a sell, or a side-to-side swap inside a market."""
+type Trade {
+  id: ID! # txSignature-instructionPath
+  market: Market!
+  trader: String! @index
+  kind: TradeKind! @index
+  side: Int! # 0 or 1. Buy: side bought. Sell: side sold. Swap: side sold (the other side is bought).
+  tokens: BigInt! # minted on a buy, burnt on a sell, minted on the opposite side on a swap
+  tokensBurned: BigInt! # sell / swap: atoms burnt from `side`; 0 on a buy
+  charged: BigInt! # quote paid into the pool (buy: after fee; swap: payout - fee; sell: 0)
+  payout: BigInt! # gross quote released from the pool (sell / swap; 0 on a buy)
+  gross: BigInt! # the trade's volume: charged on a buy, payout on a sell or swap
+  fee: BigInt! # total fee (~1.6%)
+  creatorFee: BigInt!
+  beneficiaryFee: BigInt!
+  protocolFee: BigInt! # fee - creatorFee - beneficiaryFee
+  price: Float # gross / tokens, quote atoms per token atom; null on a swap
+  supply0After: BigInt!
+  supply1After: BigInt!
+  slot: Int! @index
+  time: Int! @index
+  txSignature: String! @index
+}
+
+"""A fee seat sweeping its accrued share of one market's fees."""
+type FeeClaim {
+  id: ID! # txSignature-instructionPath
+  market: Market!
+  seat: FeeSeat! @index
+  recipient: String! @index
+  amount: BigInt! # quote atoms of the market's quote mint
+  slot: Int!
+  time: Int! @index
+  txSignature: String!
+}
+
+"""
+A wallet's trading footprint in one market. Balances are net of R8 trades only
+(the side tokens are freely transferable SPL tokens, so a wallet's on-chain
+balance can differ if it sent or received them elsewhere).
+"""
+type Position {
+  id: ID! # market-trader
+  market: Market!
+  trader: Trader!
+  balance0: BigInt!
+  balance1: BigInt!
+  quoteSpent: BigInt! # total paid in on buys (charged + fee)
+  quoteReceived: BigInt! # total received on sells (payout - fee)
+  feesPaid: BigInt!
+  tradeCount: Int!
+  firstTradeAt: Int!
+  lastTradeAt: Int!
+}
+
+type Trader {
+  id: ID! # wallet address
+  tradeCount: Int!
+  buyCount: Int!
+  sellCount: Int!
+  swapCount: Int!
+  marketsCreated: Int!
+  firstSeenAt: Int!
+  lastSeenAt: Int! @index
+  positions: [Position!]! @derivedFrom(field: "trader")
+}
+
+"""Rollup per quote asset (SOL, USDC, a tokenized stock, a memecoin, ...)."""
+type QuoteAsset {
+  id: ID! # mint address
+  decimals: Int # known once a market is launched in this asset
+  listing: String # quote-listing account; null for assets used before listings existed
+  listingAuthority: String
+  quantum: BigInt # current listing terms, copied into each new market
+  promotionThreshold: BigInt
+  listedAt: Int
+  listingUpdatedAt: Int
+  marketCount: Int!
+  tradeCount: Int!
+  volume: BigInt!
+  feesTotal: BigInt!
+  netQuoteIn: BigInt! # sum of netQuoteIn across this asset's markets
+  markets: [Market!]! @derivedFrom(field: "quoteAsset")
+}
+
+"""Per-market UTC-day bucket, for charts."""
+type MarketDailyStat {
+  id: ID! # market-dayStart
+  market: Market!
+  dayStart: Int! @index # unix seconds, 00:00 UTC
+  tradeCount: Int!
+  volume: BigInt!
+  feesTotal: BigInt!
+  closeSupply0: BigInt!
+  closeSupply1: BigInt!
+  closeNetQuoteIn: BigInt!
+}
+
+"""Protocol-wide counters (single row, id "r8")."""
+type ProtocolStats {
+  id: ID!
+  marketCount: Int!
+  tradeCount: Int!
+  buyCount: Int!
+  sellCount: Int!
+  swapCount: Int!
+  traderCount: Int!
+  quoteAssetCount: Int!
+  feeClaimCount: Int!
+  lastSlot: Int!
+  lastTradeAt: Int
+}
